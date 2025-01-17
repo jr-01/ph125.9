@@ -5,7 +5,6 @@
 library(dslabs)
 library(tidyverse)
 library(caret)
-library(plyr, include.only = c("round_any"))
 library(dplyr)
 library(recosystem)
 
@@ -123,8 +122,9 @@ rmses_mf <- sapply(mf_iterations, function(n) {
 })
 MF_best_iter <- mf_iterations[which.min(rmses_mf)]
 
-# use model with the determined best iteration value
+# setup model with the determined best iteration value (avoiding overfitting)
 reco_train(MF_best_iter)
-# predict on final holdout set 
+
+# predict on final holdout set using MF model
 y_hat_mf_final <- reco_system$predict(final_holdout_reco, out_memory())
 RMSE(y_hat_mf_final, final_holdout_test$rating)
