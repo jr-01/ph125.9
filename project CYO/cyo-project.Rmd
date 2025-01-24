@@ -1,0 +1,170 @@
+---
+title: "PH125.9 CYO project submission"
+bibliography: cyo-project-references.bib
+link-citations: true
+author: "Johannes Resch"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, dev='png')
+```
+
+## Overview
+
+This report describes the final "choose your own" project for the PH125.9 course. As per the requirement to avoid any datasets previously used in the PH125 course series, and/or commonly used datasets, the author has opted to base this work on the "USA real estate dataset" [@realestate_dataset] available on kaggle.com.
+
+We note that the dataset does not contain parameters that would be required for real-world application, such as timestamps of transactions, or a clear definition if prices noted are ask, bid or effective transaction prices. However, as the only goal of this project is to demonstrate skills tought by PH125 course series in the area of data science and machine learning, and there is no ulterior real world application involved, we consider this limitations of the dataset to be acceptable and not relevant for our project goals.
+
+First, we perform exploratory data analysis to get a fundamental understanding of the structure and quality of the data, and possible related factors.
+
+We clean and pre-filter the dataset to have enough samples for prediction, and to remove "N/A" values. Given the nature of the dataset, we found it preferable not to attempt to extrapolate and fill missing predictor values.
+
+Then, we construct a machine learning algorithm to predict real estate price for residential housing objects based on chosen input factors.
+
+## Analysis
+
+After converting the raw data (provided as CSV) in a dataframe, we start analysis of the raw data available.
+
+The original dataset contains the following number of rows:
+
+```{r}
+nrow(realtor_df_orig)
+```
+
+Then we look at the structure of available columns:
+
+```{r out.width="80%"}
+str(realtor_df_orig)
+```
+
+We note the following available columns:
+
+-   "brokered_by": agency/broker, encoded as categorical value
+
+-   "status": housing status, either "for_sale", "sold" or "ready_to_build"
+
+-   "price": housing price. We note that the currency is not specified in the source data. Considering dataset only includes US real estate objects, we take the assumption the currency is USD.
+
+-   "bed": number of bedrooms
+
+-   "bath": number of bathrooms
+
+-   "acre_lot": size of property in acres
+
+-   "street": street address encoded as categorical value
+
+-   "city": name of city property is located in
+
+-   "state": name of US state propert is located in. We notice that also overseas terretories are included in the raw data.
+
+-   "zip_code": postal code of area property is located in
+
+-   "house_size": living space area in square feet
+
+-   "prev_sold_date": date when property was previously sold, encoded as string in "YYYY-MM-DD" format
+
+Looking at the "prev_sold_date" more closely, we notice only approx. 33% of records actually have this value set. We therefore decide to exclude this parameter as predictor.
+
+We note that the dataset does not clearly document if the "price" value is ask, bid or effective transaction price for a given property. We also note that the dataset does not include the transaction date at which the listed price was applied. These two constraints together would render the dataset mostly unusable for real world applications, as it is not possible to normalize prices vs. inflation (a price paid 50 years ago cannot be compared 1:1 to prices paid in a recent transaction), or other macro-economic factors relevant to the housing sector (e.g. we would expect significant changes of pricing during the subprime crises 2007-2010). As however the whole purpose of this project is to demonstrate skills in data science and machine learning, we consider these constraints irrelevant for the task. For the sake of our analysis and predictions, we assume that values of "price" column in the dataset are comparable and do not require normalization.
+
+Based on insights gained so far, we take the following steps to pre-filter the raw data:
+
+-   to have comparable prices, we will focus on US continental states (plus DC) only and remove rows for overseas terretories and Hawaii
+
+-   as data is populated too sparse, we drop the "prev_sold_date" column
+
+-   as we need a certain minimum number of samples per predictor to make meaningful analysis and prediction, we will drop the "street" column
+
+-   we will drop all rows that have an empty string for "state", as well as those that have "N/A" for price
+
+-   we will filter to only include objects that have "status" being either "for_sale" or "sold" (as we want to have data only for existing buildings)
+
+-   we will drop all rows that have N/A or 0 for "bed" and "bath" values
+
+We now look at distribution of rows per state, and notice that there is a high variance:
+```{r, echo=FALSE, dpi=300, out.height="42%"}
+realtor_df_mod %>% group_by(state) %>% summarize(count=n()) %>% arrange(desc(count)) %>% 
+  ggplot(aes(x=reorder(state, -count), y=count)) + geom_col()  + xlab("states") + theme(axis.text.x = element_text(angle = 90))
+```
+
+To have enough data for predictions, in case we want to use "state" as predictor, we may have to define a threshold to exclude those states with only a handful of records.
+
+Similarly, when looking at the distribution of records across zip codes, we note that only a rather small number of zip codes has reasonably large numbers to allow meaningful use as predictor variable:
+
+```{r, echo=FALSE, dpi=300, out.height="42%"}
+realtor_df_mod %>% group_by(zip_code) %>% summarize(count=n()) %>% arrange(desc(count)) %>% pull(count) %>% hist(main=NULL)
+```
+
+Assuming we would want to have at least 50 records per zip code, the number of zip codes applicable is:
+
+```{r width=300}
+realtor_df_mod %>% group_by(zip_code) %>% summarize(count=n()) %>% arrange(desc(count)) %>% filter(count >= 50) %>% nrow()
+```
+
+All subsequent actions will be done on a filtered datset based on applicable ZIP codes with at least 50 rows.
+This filter results in roughly 13% decrease of total rows in the dataset (based on prior filters), or roughly 1.47M remaining records.
+
+Looking at the resulting dataset, we note that "acre_lot" and "house_size" predictor columns still have "N/A" values:
+
+```{r width=300}
+summary(realtor_df_mod4)
+```
+We remove "N/A" values for house size, resultin in approx 1.38M remaining rows.
+
+
+To get an understanding about plausibility of our data, we plot prices vs. states as barplot, and prices vs. zip code:
+
+```{r, echo=FALSE, dpi=300, out.height="42%"}
+realtor_df_mod5 %>% select(price, state) %>%
+  ggplot(aes(x=state, y=price)) + geom_boxplot() + scale_y_log10(labels = scales::comma) + theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r, echo=FALSE, dpi=300, out.height="42%"}
+realtor_df_mod5 %>% select(price, zip_code) %>%
+  ggplot(aes(x=zip_code, y=price)) + geom_point() + scale_y_log10(labels = scales::comma)
+```
+
+Based on these plots, we can see that we do have a number of records with extremely low prices (in 0-5000 range).
+After brief research done, the author found that it is actually possible to find such offers in US in certain areas (e.g. Detroit) where for various reasons many unoccupied buildings exist and local communities try to attract new inhabitants.
+For this reason, and because overall, the number of rows with price < 5000 in the filtered dataset is only 368, the author decided to leave these records in the dataset.
+
+Further sanity checking on the max. number of bed and bathrooms reported shows a number of records with implausible numbers (e.g. 460 bathrooms, or 200+ bedrooms).
+To get rid of these outliers, after graphing the distribution, we defined a filter threshold of 10 bedrooms and 8 bathrooms. After this filter, we still ahve approx. 1.38M remaining rows.
+
+The dataset now appears to have more plausible numbers for bed/bathroom numbers:
+```{r, echo=FALSE, dpi=300, out.height="42%"}
+realtor_df_mod6 %>% group_by(bath) %>% summarize(count=n()) %>% arrange((desc(count))) %>% 
+  ggplot(aes(x=bath, y= count)) + geom_col() + xlim(1,max(realtor_df_mod6$bath)) + xlab("# of bathrooms") + 
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r, echo=FALSE, dpi=300, out.height="42%"}
+realtor_df_mod6 %>% group_by(bed) %>% summarize(count=n()) %>% arrange((desc(count))) %>% 
+  ggplot(aes(x=bed, y= count)) + geom_col() + xlim(1,max(realtor_df_mod6$bed)) + xlab("# of bedrooms") + 
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+As further step to clean the dataset, we check for and remove duplicate rows (approx. 15k records). After removing the duplicat rows, we have approx. 1.36M records left in the dataset.
+
+
+
+Our "final", filtered dataset therefore looks as follows:
+```{r width=300}
+summary(realtor_df_mod7)
+```
+
+
+
+## Results
+
+## Conclusion
+
+## References
+
+::: {#refs}
+:::
+
