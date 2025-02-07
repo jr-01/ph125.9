@@ -7,6 +7,7 @@ date: "`r Sys.Date()`"
 output:
   pdf_document: default
   html_document: default
+  
 ---
 
 ```{r setup, include=FALSE}
@@ -155,6 +156,17 @@ As further step to clean the dataset, we check for and remove duplicate rows (ap
 Our "final", filtered dataset therefore looks as follows:
 ```{r width=300}
 summary(realtor_df_mod7)
+```
+We now look at possible correlations of our factors. As we have a combination of both numerical and categorical variables, solutions outside of what was discussed during the course are required. We use a method found in related forums [@cormatrix].
+
+A first iteration of this calculation shows that we do not have strong correlations for price.
+```{r, echo=FALSE, dpi=300}
+df_res %>%
+  ggplot(aes(x,y,fill=cramV))+
+  geom_tile(color="black")+
+  geom_text(aes(x,y,label=cramV), size = 5/.pt)+
+  scale_fill_gradientn(colors = hcl.colors(20, "RdYlGn")) + 
+  coord_fixed() + theme_classic()
 ```
 
 

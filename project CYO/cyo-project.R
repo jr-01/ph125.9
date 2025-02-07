@@ -54,7 +54,8 @@ realtor_df_orig %>% select(state) %>% unique()
 realtor_df_orig %>% select(state) %>% unique() %>% count()
 
 # check format of "prev_sold_date"
-realtor_df_mod %>% select(prev_sold_date) %>% unique() 
+realtor_df_orig %>% select(prev_sold_date) %>% unique() 
+
 
 # check how many entries have "prev_sold_date" set
 realtor_df_orig %>% filter(grepl("^$", prev_sold_date)) %>% nrow() / nrow(realtor_df_orig)
@@ -69,6 +70,8 @@ realtor_df_mod <- realtor_df_orig %>% select(!street) %>% select(!prev_sold_date
 realtor_df_mod %>% select(state) %>% unique() 
 realtor_df_mod %>% select(state) %>% unique() %>% count()
 str(realtor_df_mod)
+
+
 
 ### exploratory data analysis
 
@@ -217,8 +220,8 @@ test_set <- realtor_df_mod8[test_index,]
 
 # implement random forest model
 
-train_rf <- randomForest(price ~ bed + bath + zip_code + house_size, data=train_set)
-y_hat_rf <- predict(train_rf, test_set)
-confusionMatrix(y_hat_rf, test_set$price)
-train_rf
+#train_rf <- randomForest(price ~ bed + bath + zip_code + house_size, data=train_set)
+#y_hat_rf <- predict(train_rf, test_set)
+#confusionMatrix(y_hat_rf, test_set$price)
+#train_rf
 
