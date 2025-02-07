@@ -1,4 +1,9 @@
 # PH125.9 CYO project - Johannes Resch
+
+# Note: all code in this project was developed and executed on a host with 64GB RAM. 
+# Where applicable, dataset size for model training was reduced to allow per model 
+# training time to remain below 3 minutes (using Macbook M4 Pro Max as reference).
+
 # code to download dataset
 
 if (!require(tidyverse)) install.packages('tidyverse')

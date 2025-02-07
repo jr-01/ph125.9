@@ -25,6 +25,8 @@ We clean and pre-filter the dataset to have enough samples for prediction, and t
 
 Then, we construct a machine learning algorithm to predict real estate price for residential housing objects based on chosen input factors.
 
+Note: all code in this project was developed and executed on a host with 64GB RAM. Where applicable, dataset size for model training was reduced to allow per model training time to remain below 3 minutes (using Macbook M4 Pro Max as reference).
+
 ## Analysis
 
 After converting the raw data (provided as CSV) in a dataframe, we start analysis of the raw data available.
@@ -114,7 +116,7 @@ Looking at the resulting dataset, we note that "acre_lot" and "house_size" predi
 summary(realtor_df_mod4)
 ```
 
-We remove "N/A" values for house size, resultin in approx 1.38M remaining rows.
+We remove "N/A" values for house size, resulting in approx 1.38M remaining rows.
 
 To get an understanding about plausibility of our data, we plot prices vs. states as barplot, and prices vs. zip code:
 
@@ -128,7 +130,7 @@ realtor_df_mod5 %>% select(price, zip_code) %>%
   ggplot(aes(x=zip_code, y=price)) + geom_point() + scale_y_log10(labels = scales::comma)
 ```
 
-Based on these plots, we can see that we do have a number of records with extremely low prices (in 0-5000 range) specifically 368 records. The author decided to drop these records in the dataset.
+Based on these plots, we can see that we do have around 370 records with extremely low prices (in 0-5000 range). These outliers will be removed from the dataset.
 
 Filtering outliers in upper range of price, we calculate the threshold price based on Z-score 3:
 
@@ -139,7 +141,7 @@ z_3_price
 
 Roughly 0.8% of rows are above this threshold, we will drop them from the dataset.
 
-Further sanity checking on the max. number of bed and bathrooms reported shows a number of records with implausible numbers (e.g. 460 bathrooms, or 200+ bedrooms). To get rid of these outliers, we again calculate upper threshold based on Z-score 3.
+Further sanity checking on the max. number of bed and bathrooms reported shows a number of records with implausible numbers (e.g. 460 bathrooms, or 200+ bedrooms). To get rid of these outliers, we again calculate upper threshold based on z-score 3.
 
 ```{r width=300}
 z_3_bath
@@ -160,7 +162,7 @@ realtor_df_mod6 %>% group_by(bed) %>% summarize(count=n()) %>% arrange((desc(cou
   theme(axis.text.x = element_text(angle = 90))
 ```
 
-We apply similar filter for Z-score 3 on the "house_size" parameter, dropping another approx. 4490 rows.
+We apply a similar filter for upper threshold (Z-score 3) on the "house_size" parameter, dropping another approx. 4490 rows.
 
 As further step to clean the dataset, we check for and remove duplicate rows (approx. 15k records), and remove "N/A" values for "acre_lot" and "brokered_by". After removing the duplicate rows, we have approx. 1.34M records left in the dataset.
 
@@ -176,7 +178,7 @@ str(realtor_df_prefilter_final)
 summary(realtor_df_prefilter_final)
 ```
 
-We now look at possible correlations of our factors. As we have a combination of both numerical and categorical variables, solutions outside of what was discussed during the course are required. We use a method found in related forums [@cormatrix].
+We now look at possible correlations of our factors. As we have a combination of both numerical and categorical variables, solutions outside of solutions discussed during the course are required. We use a method found in related forums [@cormatrix].
 
 The resulting correlation matrix shows that we do not have strong correlations for price.
 
@@ -189,9 +191,9 @@ df_res %>%
   coord_fixed() + theme_classic()
 ```
 
-In order to cover the prediction part for this project work, we will nevertheless proceed with tuning and fitting some models to demonstrate the related functions, using the derived value price per square foot as response variable.
+In order to cover the prediction part for this project work, we will nevertheless proceed with tuning and fitting some models to demonstrate the related functions, using the derived value "price per square foot" as response variable.
 
-Prior to fitting any models, we normalize the numeric predictor values using the "scale()" function, and add price per squarefeet as response variable.
+Prior to fitting any models, we normalize the numeric predictor values using the "scale()" function, and add "price per squarefoot" as response variable.
 
 In preparation of training our models, we create a test/training split of 20/80. Models are tuned/fitted only with the training dataset. The test dataset is used for final prediction and RMSE calculation only.
 
@@ -200,8 +202,10 @@ In preparation of training our models, we create a test/training split of 20/80.
 To demonstrate prediction, we use two models - loess ("gamLoess") and random forest ("rf). For the randomForest model, in order to keep the execution time of cross validation for tuning the "mtry" parameter at a reasonable level (\<\< 3 minutes on a Macbook Pro M4 Max), we execute the cross validation only with a 10% split of the training dataset.
 
 ```{r width=300}
-# use only subset of train data for model tuning to limit execution time to reasonable level (<<3min)
-model_tune_index <- createDataPartition(y = train_set$price_sqft, times = 1, p = 0.1, list = FALSE)
+# use only subset of train data for model tuning to limit execution 
+# time to reasonable level (<<3min)
+model_tune_index <- createDataPartition(y = train_set$price_sqft, 
+                                        times = 1, p = 0.1, list = FALSE)
 tune_set <- train_set[model_tune_index, ]
 
 control_rf <- trainControl(method="cv", number = 5)
@@ -213,7 +217,8 @@ train_rf <-  train(price_sqft ~ bed + bath + house_size, data = tune_set,
                    tuneGrid = grid)
 
 # fit model with best parameter value on whole training data set
-fit_rf <- randomForest(price_sqft ~ bed + bath + house_size, data=train_set, minNode = train_rf$bestTune$mtry)
+fit_rf <- randomForest(price_sqft ~ bed + bath + house_size, 
+                       data=train_set, minNode = train_rf$bestTune$mtry)
 y_hat_rf <- predict(fit_rf, test_set)
 
 # calculate RMSE 
@@ -241,13 +246,15 @@ We note that for both models, the accuracy defined by RMSE is poor. This is cons
 
 We have demonstrated exploratory data analysis, data filtering and cleaning, and prediction using multiple ML models using a large dataset unrelated to prior activities during the data science course.
 
-While we were able to derive relevant aspects of the dataset during the analysis part of the work, the prediction results - using tools and methods covered in the data science course - would be not useable for real world use cases due to poor accuracy.
+While we were able to derive relevant aspects of the dataset during the analysis part of the work, the prediction results - using tools and methods covered in the data science course - would be not satisfactory for real world use cases due to poor accuracy.
 
 Possible actions to improve on this could be:
 
 -   merge dataset with other relevant data (such as average wealth/income per ZIP or city, or crime statistics per ZIP or city), to get a dataset that has reasonably high correlation between predictors and our response variable
 
--   possibly find advanced data science / ML techniques that yield better results with the existing dataset
+-   possibly find advanced data science / ML techniques (outside of what was covered in the data science course) that may yield better results with the existing dataset
+
+In hindsight, the author would opt to select a different dataset to work with, allowing more satisfactory results even with the novice-level skills covered in the data science course.
 
 ## References
 
