@@ -197,9 +197,14 @@ Prior to fitting any models, we normalize the numeric predictor values using the
 
 In preparation of training our models, we create a test/training split of 20/80. Models are tuned/fitted only with the training dataset. The test dataset is used for final prediction and RMSE calculation only.
 
+To demonstrate prediction, we use two models - loess ("gamLoess") and random forest ("rf). 
+We use numeric predictors "bath", "bed" and "house_size" in both cases.
+
+For the randomForest model, in order to keep the execution time of cross validation for tuning the "mtry" parameter at a reasonable level (\<\< 3 minutes on a Macbook Pro M4 Max), we execute the cross validation only with a 10% split of the training dataset.
+
 ## Results
 
-To demonstrate prediction, we use two models - loess ("gamLoess") and random forest ("rf). For the randomForest model, in order to keep the execution time of cross validation for tuning the "mtry" parameter at a reasonable level (\<\< 3 minutes on a Macbook Pro M4 Max), we execute the cross validation only with a 10% split of the training dataset.
+Resulting RMSE for both models (and the code used to train/predict) is shown below.
 
 ```{r width=300}
 # use only subset of train data for model tuning to limit execution 
@@ -245,6 +250,8 @@ We note that for both models, the accuracy defined by RMSE is poor. This is cons
 ## Conclusion
 
 We have demonstrated exploratory data analysis, data filtering and cleaning, and prediction using multiple ML models using a large dataset unrelated to prior activities during the data science course.
+
+Restrictions found in the dataset would limit its usability in real world use cases, namely that property prices are not clearly linked to a transaction date (and thus cannot be adjusted for inflation or other effects over time).
 
 While we were able to derive relevant aspects of the dataset during the analysis part of the work, the prediction results - using tools and methods covered in the data science course - would be not satisfactory for real world use cases due to poor accuracy.
 
