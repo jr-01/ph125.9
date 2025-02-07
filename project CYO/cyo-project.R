@@ -17,6 +17,10 @@ if (!require(randomForest)) install.packages('randomForest')
 library(randomForest)
 if (!require(lsr)) install.packages('lsr')
 library(lsr)
+if (!require(lsr)) install.packages('Metrics')
+library(Metrics)
+if (!require(lsr)) install.packages('gam')
+library(gam)
 
 ### download of chosen raw dataset
 
@@ -72,6 +76,7 @@ realtor_df_mod %>% select(state) %>% unique() %>% count()
 str(realtor_df_mod)
 
 
+set.seed(2025)
 
 ### exploratory data analysis
 
@@ -137,6 +142,14 @@ realtor_df_mod5 %>% select(price, zip_code) %>%
 
 realtor_df_mod5 %>% filter(price < 5000) %>% nrow()
 
+# calculate upper price threshold for z-score of 3
+
+z_3_price <- (3* sd(realtor_df_mod5$price)) + mean(realtor_df_mod5$price) 
+z_3_price_rows <- realtor_df_mod5 %>% filter(price > z_3_price) %>% nrow()
+
+# fraction of rows that have price > then z-score 3
+z_3_price_rows / realtor_df_mod5 %>% nrow()
+
 # check highest number of bathrooms 
 realtor_df_mod5 %>% group_by(bath) %>% summarize(count=n()) %>% arrange(desc(bath)) 
 
@@ -149,10 +162,26 @@ realtor_df_mod5 %>% group_by(bath) %>% summarize(count=n()) %>% arrange((desc(co
 realtor_df_mod5 %>% group_by(bed) %>% summarize(count=n()) %>% arrange((desc(count))) %>% 
   ggplot(aes(x=bed, y= count)) + geom_col() + xlim(1,20) + xlab("# of bedrooms") + theme(axis.text.x = element_text(angle = 90))
 
-# filter data based on threshold 10 bedrooms and 8 bathrooms
+# calculate upper threshold for bed and bathroom parameters for z-score 3
 
-realtor_df_mod6 <- realtor_df_mod5 %>% filter(bed <= 10) %>% filter(bath <= 8)
-nrow(realtor_df_mod5)
+z_3_bed <- (3* sd(realtor_df_mod5$bed)) + mean(realtor_df_mod5$bed) 
+z_3_bed
+z_3_bath <- (3* sd(realtor_df_mod5$bath)) + mean(realtor_df_mod5$bath) 
+z_3_bath
+
+# calculate upper threshold for house size for z-score 3
+
+z_3_house <- (3* sd(realtor_df_mod5$house_size)) + mean(realtor_df_mod5$house_size)
+z_3_house_rows <- realtor_df_mod5 %>% filter(house_size > z_3_house) %>% nrow()
+
+# filter data based on threshold 8 bedrooms and 6 bathrooms, remove price outliers, remove house size outliers
+
+realtor_df_mod6 <- realtor_df_mod5 %>% filter(bed <= 8) %>% filter(bath <= 6) %>% 
+  filter(price > 5000) %>% filter(price <= z_3_price) %>% filter(house_size <= z_3_house)
+# check resulting number of rows
+nrow(realtor_df_mod6)
+# check histogram of price distribution after filtering outliers
+hist(realtor_df_mod6$price)
 
 # resulting distribution of bed and bath
 
@@ -180,26 +209,28 @@ realtor_df_mod6 %>% summarize(cor(price, bath))
 realtor_df_mod6 %>% summarize(cor(price, house_size))             
 realtor_df_mod7 %>% summarize(cor(price, zip_code))    
 
-# to manage memory/compute need, for prediction we limit to a single state
-realtor_df_mod8 <- realtor_df_mod7 %>% filter(!is.na(acre_lot)) %>% filter(!is.na(brokered_by)) %>% filter(state == "California")
-
+# remove N/A values for acre_lot and brokered_by. Also, to manage memory/compute need, for prediction we limit to a single state
+# we will replace price with price per sqft acting as our response variable
+realtor_df_prefilter_final <- realtor_df_mod7 %>% filter(!is.na(acre_lot)) %>% filter(!is.na(brokered_by)) %>% 
+  filter(state == "California") %>% select(!state)
+str(realtor_df_prefilter_final)
 
 # create correlation matrix (from https://stackoverflow.com/questions/52554336/plot-the-equivalent-of-correlation-matrix-for-factors-categorical-data-and-mi)
-library(lsr)
 
 # function to get chi square p value and Cramers V
-f = function(x,y) {
-  tbl = realtor_df_mod8 %>% select(x,y) %>% table()
-  chisq_pval = round(chisq.test(tbl)$p.value, 4)
-  cramV = round(cramersV(tbl), 4) 
-  data.frame(x, y, chisq_pval, cramV) }
+f <- function(x,y) {
+  tbl <- realtor_df_prefilter_final %>% select(x,y) %>% table()
+  chisq_pval <- round(chisq.test(tbl)$p.value, 4)
+  cramV <- round(cramersV(tbl), 4) 
+  data.frame(x, y, chisq_pval, cramV)
+}
 
 # create unique combinations of column names
 # sorting will help getting a better plot (upper triangular)
-df_comb = data.frame(t(combn(sort(names(realtor_df_mod8)), 2)), stringsAsFactors = F)
+df_comb <- data.frame(t(combn(sort(names(realtor_df_prefilter_final)), 2)), stringsAsFactors = F)
 
 # apply function to each variable combination
-df_res = map2_df(df_comb$X1, df_comb$X2, f)
+df_res <- map2_df(df_comb$X1, df_comb$X2, f)
 
 # plot results
 df_res %>%
@@ -209,19 +240,65 @@ df_res %>%
   scale_fill_gradientn(colors = hcl.colors(20, "RdYlGn")) + 
   coord_fixed() + theme_classic()
 
+
+## add price per sqft as response variable, and drop "price" afterwards
+
+df_derived <- realtor_df_prefilter_final %>% mutate(price_sqft = price/house_size) %>% select(!price)
+str(df_derived)
+
+
+# normalize/scale numeric predictor values
+df_scaled <- data.frame(price_sqft = df_derived$price_sqft,
+                        bed = scale(df_derived$bed),
+                        bath = scale(df_derived$bath),
+                        acre_lot = scale(df_derived$acre_lot), 
+                        zip_code = scale(df_derived$zip_code),
+                        house_size = scale(df_derived$house_size),
+                        city = df_derived$city,
+                        status = df_derived$status,
+                        brokered_by = df_derived$brokered_by)
+str(df_scaled)
+hist(df_scaled$house_size)
+
 ### building models
 
 # implement test/training split
 
-test_index <- createDataPartition(y = realtor_df_mod8$price, times = 1, p = 0.2, list = FALSE)
-train_set <- realtor_df_mod8[-test_index,]
-test_set <- realtor_df_mod8[test_index,]
+test_index <- createDataPartition(y = df_scaled$price_sqft, times = 1, p = 0.2, list = FALSE)
+train_set <- df_scaled[-test_index,]
+test_set <- df_scaled[test_index,]
+test_y <- test_set$price_sqft
 
 
 # implement random forest model
 
-#train_rf <- randomForest(price ~ bed + bath + zip_code + house_size, data=train_set)
-#y_hat_rf <- predict(train_rf, test_set)
-#confusionMatrix(y_hat_rf, test_set$price)
-#train_rf
+# use only subset of train data for model tuning to limit execution time to reasonable level (<<3min)
+model_tune_index <- createDataPartition(y = train_set$price_sqft, times = 1, p = 0.1, list = FALSE)
+tune_set <- train_set[model_tune_index, ]
 
+control_rf <- trainControl(method="cv", number = 5)
+grid <- data.frame(mtry = c(1, 2, 3))
+train_rf <-  train(price_sqft ~ bed + bath + house_size, data = tune_set,
+                   method = "rf",
+                   nTree = 50,
+                   trControl = control_rf,
+                   tuneGrid = grid)
+
+# fit model with best parameter value on whole training data set
+fit_rf <- randomForest(price_sqft ~ bed + bath + house_size, data=train_set, minNode = train_rf$bestTune$mtry)
+y_hat_rf <- predict(fit_rf, test_set)
+
+# calculate RMSE 
+rmse(y_hat_rf, test_y)
+
+
+# implement GAM model, here training can be done on full train dataset within <<3 min
+grid_gam <- expand.grid(span = seq(0.15, 0.65, len = 10), degree = 1)
+train_gam <- train(price_sqft ~ bed + bath + house_size, data = train_set,
+                   method = "gamLoess",
+                   tuneGrid = grid_gam)
+
+y_hat_gam <- predict(train_gam, test_set)
+
+# calculate RMSE
+rmse(y_hat_gam, test_y)

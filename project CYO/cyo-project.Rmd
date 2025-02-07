@@ -7,7 +7,6 @@ date: "`r Sys.Date()`"
 output:
   pdf_document: default
   html_document: default
-  
 ---
 
 ```{r setup, include=FALSE}
@@ -18,7 +17,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, dev='png')
 
 This report describes the final "choose your own" project for the PH125.9 course. As per the requirement to avoid any datasets previously used in the PH125 course series, and/or commonly used datasets, the author has opted to base this work on the "USA real estate dataset" [@realestate_dataset] available on kaggle.com.
 
-We note that the dataset does not contain parameters that would be required for real-world application, such as timestamps of transactions, or a clear definition if prices noted are ask, bid or effective transaction prices. However, as the only goal of this project is to demonstrate skills tought by PH125 course series in the area of data science and machine learning, and there is no ulterior real world application involved, we consider this limitations of the dataset to be acceptable and not relevant for our project goals.
+We note that the dataset does not contain parameters that would be required for real-world application, such as timestamps of transactions, or a clear definition if prices noted are ask, bid or effective transaction prices. However, as the only goal of this project is to demonstrate skills taught by PH125 course series in the area of data science and machine learning, and there is no ulterior real world application involved, we consider this limitations of the dataset to be acceptable and not relevant for our project goals.
 
 First, we perform exploratory data analysis to get a fundamental understanding of the structure and quality of the data, and possible related factors.
 
@@ -87,6 +86,7 @@ Based on insights gained so far, we take the following steps to pre-filter the r
 -   we will drop all rows that have N/A or 0 for "bed" and "bath" values
 
 We now look at distribution of rows per state, and notice that there is a high variance:
+
 ```{r, echo=FALSE, dpi=300, out.height="42%"}
 realtor_df_mod %>% group_by(state) %>% summarize(count=n()) %>% arrange(desc(count)) %>% 
   ggplot(aes(x=reorder(state, -count), y=count)) + geom_col()  + xlab("states") + theme(axis.text.x = element_text(angle = 90))
@@ -106,16 +106,15 @@ Assuming we would want to have at least 50 records per zip code, the number of z
 realtor_df_mod %>% group_by(zip_code) %>% summarize(count=n()) %>% arrange(desc(count)) %>% filter(count >= 50) %>% nrow()
 ```
 
-All subsequent actions will be done on a filtered datset based on applicable ZIP codes with at least 50 rows.
-This filter results in roughly 13% decrease of total rows in the dataset (based on prior filters), or roughly 1.47M remaining records.
+All subsequent actions will be done on a filtered datset based on applicable ZIP codes with at least 50 rows. This filter results in roughly 13% decrease of total rows in the dataset (based on prior filters), or roughly 1.47M remaining records.
 
 Looking at the resulting dataset, we note that "acre_lot" and "house_size" predictor columns still have "N/A" values:
 
 ```{r width=300}
 summary(realtor_df_mod4)
 ```
-We remove "N/A" values for house size, resultin in approx 1.38M remaining rows.
 
+We remove "N/A" values for house size, resultin in approx 1.38M remaining rows.
 
 To get an understanding about plausibility of our data, we plot prices vs. states as barplot, and prices vs. zip code:
 
@@ -129,14 +128,26 @@ realtor_df_mod5 %>% select(price, zip_code) %>%
   ggplot(aes(x=zip_code, y=price)) + geom_point() + scale_y_log10(labels = scales::comma)
 ```
 
-Based on these plots, we can see that we do have a number of records with extremely low prices (in 0-5000 range).
-After brief research done, the author found that it is actually possible to find such offers in US in certain areas (e.g. Detroit) where for various reasons many unoccupied buildings exist and local communities try to attract new inhabitants.
-For this reason, and because overall, the number of rows with price < 5000 in the filtered dataset is only 368, the author decided to leave these records in the dataset.
+Based on these plots, we can see that we do have a number of records with extremely low prices (in 0-5000 range) specifically 368 records. The author decided to drop these records in the dataset.
 
-Further sanity checking on the max. number of bed and bathrooms reported shows a number of records with implausible numbers (e.g. 460 bathrooms, or 200+ bedrooms).
-To get rid of these outliers, after graphing the distribution, we defined a filter threshold of 10 bedrooms and 8 bathrooms. After this filter, we still ahve approx. 1.38M remaining rows.
+Filtering outliers in upper range of price, we calculate the threshold price based on Z-score 3:
 
-The dataset now appears to have more plausible numbers for bed/bathroom numbers:
+```{r width=300}
+z_3_price <- (3* sd(realtor_df_mod5$price)) + mean(realtor_df_mod5$price)
+z_3_price
+```
+
+Roughly 0.8% of rows are above this threshold, we will drop them from the dataset.
+
+Further sanity checking on the max. number of bed and bathrooms reported shows a number of records with implausible numbers (e.g. 460 bathrooms, or 200+ bedrooms). To get rid of these outliers, we again calculate upper threshold based on Z-score 3.
+
+```{r width=300}
+z_3_bath
+z_3_bed
+```
+
+Based on these values, we filter our dataset to exclude rows with "bath" \> 7 and "bed" \> 8 The dataset now appears to have more plausible numbers for bed/bathroom numbers:
+
 ```{r, echo=FALSE, dpi=300, out.height="42%"}
 realtor_df_mod6 %>% group_by(bath) %>% summarize(count=n()) %>% arrange((desc(count))) %>% 
   ggplot(aes(x=bath, y= count)) + geom_col() + xlim(1,max(realtor_df_mod6$bath)) + xlab("# of bathrooms") + 
@@ -149,18 +160,27 @@ realtor_df_mod6 %>% group_by(bed) %>% summarize(count=n()) %>% arrange((desc(cou
   theme(axis.text.x = element_text(angle = 90))
 ```
 
-As further step to clean the dataset, we check for and remove duplicate rows (approx. 15k records). After removing the duplicat rows, we have approx. 1.36M records left in the dataset.
+We apply similar filter for Z-score 3 on the "house_size" parameter, dropping another approx. 4490 rows.
 
+As further step to clean the dataset, we check for and remove duplicate rows (approx. 15k records), and remove "N/A" values for "acre_lot" and "brokered_by". After removing the duplicate rows, we have approx. 1.34M records left in the dataset.
 
+As this dataset is still to large for model training on the available compute platforms, we filter by the largest state.
 
 Our "final", filtered dataset therefore looks as follows:
+
 ```{r width=300}
-summary(realtor_df_mod7)
+str(realtor_df_prefilter_final)
 ```
+
+```{r width=300}
+summary(realtor_df_prefilter_final)
+```
+
 We now look at possible correlations of our factors. As we have a combination of both numerical and categorical variables, solutions outside of what was discussed during the course are required. We use a method found in related forums [@cormatrix].
 
-A first iteration of this calculation shows that we do not have strong correlations for price.
-```{r, echo=FALSE, dpi=300}
+The resulting correlation matrix shows that we do not have strong correlations for price.
+
+```{r, echo=TRUE, dpi=300}
 df_res %>%
   ggplot(aes(x,y,fill=cramV))+
   geom_tile(color="black")+
@@ -169,14 +189,67 @@ df_res %>%
   coord_fixed() + theme_classic()
 ```
 
+In order to cover the prediction part for this project work, we will nevertheless proceed with tuning and fitting some models to demonstrate the related functions, using the derived value price per square foot as response variable.
 
+Prior to fitting any models, we normalize the numeric predictor values using the "scale()" function, and add price per squarefeet as response variable.
+
+In preparation of training our models, we create a test/training split of 20/80. Models are tuned/fitted only with the training dataset. The test dataset is used for final prediction and RMSE calculation only.
 
 ## Results
 
+To demonstrate prediction, we use two models - loess ("gamLoess") and random forest ("rf). For the randomForest model, in order to keep the execution time of cross validation for tuning the "mtry" parameter at a reasonable level (\<\< 3 minutes on a Macbook Pro M4 Max), we execute the cross validation only with a 10% split of the training dataset.
+
+```{r width=300}
+# use only subset of train data for model tuning to limit execution time to reasonable level (<<3min)
+model_tune_index <- createDataPartition(y = train_set$price_sqft, times = 1, p = 0.1, list = FALSE)
+tune_set <- train_set[model_tune_index, ]
+
+control_rf <- trainControl(method="cv", number = 5)
+grid <- data.frame(mtry = c(1, 2, 3))
+train_rf <-  train(price_sqft ~ bed + bath + house_size, data = tune_set,
+                   method = "rf",
+                   nTree = 50,
+                   trControl = control_rf,
+                   tuneGrid = grid)
+
+# fit model with best parameter value on whole training data set
+fit_rf <- randomForest(price_sqft ~ bed + bath + house_size, data=train_set, minNode = train_rf$bestTune$mtry)
+y_hat_rf <- predict(fit_rf, test_set)
+
+# calculate RMSE 
+rmse(y_hat_rf, test_y)
+```
+
+The gamLoess model can be tuned with the full train dataset.
+
+```{r width=300}
+# implement GAM model, here training can be done on full train dataset within <<3 min
+grid_gam <- expand.grid(span = seq(0.15, 0.65, len = 10), degree = 1)
+train_gam <- train(price_sqft ~ bed + bath + house_size, data = train_set,
+                   method = "gamLoess",
+                   tuneGrid = grid_gam)
+
+y_hat_gam <- predict(train_gam, test_set)
+
+# calculate RMSE
+rmse(y_hat_gam, test_y)
+```
+
+We note that for both models, the accuracy defined by RMSE is poor. This is considered to be a direct effect of the low correlation of the predictors we already saw in the data analysis.
+
 ## Conclusion
+
+We have demonstrated exploratory data analysis, data filtering and cleaning, and prediction using multiple ML models using a large dataset unrelated to prior activities during the data science course.
+
+While we were able to derive relevant aspects of the dataset during the analysis part of the work, the prediction results - using tools and methods covered in the data science course - would be not useable for real world use cases due to poor accuracy.
+
+Possible actions to improve on this could be:
+
+-   merge dataset with other relevant data (such as average wealth/income per ZIP or city, or crime statistics per ZIP or city), to get a dataset that has reasonably high correlation between predictors and our response variable
+
+-   possibly find advanced data science / ML techniques that yield better results with the existing dataset
 
 ## References
 
 ::: {#refs}
 :::
-
